@@ -1,0 +1,8 @@
+name: 'Rise Grafana Action'
+description: 'Send request to annotate grafana dashboard'
+branding:
+  icon: activity
+  color: orange
+runs:
+  using: 'docker'
+  image: 'Dockerfile'

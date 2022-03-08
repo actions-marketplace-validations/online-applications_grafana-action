@@ -1,0 +1,39 @@
+name: push
+on:
+  push:
+    branches:
+      - production
+
+env:
+  COMMIT_MESSAGE:         ${{ github.event.head_commit.message }}
+  ENVIRONMENT:            ${{ github.ref_name }}
+
+jobs:
+  Version:
+    name: Calculate Version
+    needs: [Slack_Start]
+    runs-on: ubuntu-latest
+    outputs:
+      repo_version_env: ${{ steps.version.outputs.repo_tag }}
+      ecr_version_env: ${{ steps.version.outputs.ecr_tag }}
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+      with:
+          fetch-depth: 0
+    - name: Calculate version
+      id: version
+      uses: online-applications/version-action@v1.8.9
+  Push_Tag:
+    name: Push New Tag
+    needs: [Test, Version]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+      with:
+          fetch-depth: 0
+    - name: Push version
+      run: |
+        git tag ${{ needs.Version.outputs.repo_version_env }}
+        git push --tags
