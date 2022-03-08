@@ -145,7 +145,7 @@ func main(){
 						Panelid: panel.ID,
 						Time: millis,
 						Timeend: millis,
-						Tags: []string{"concourse", "deploy", "cicd", projectName},
+						Tags: []string{"GitHub_Action", "deploy", "cicd", projectName},
 						Text: "Deploy success",
 					}
 					log.Println(annotation)
