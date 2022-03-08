@@ -11,7 +11,6 @@ env:
 jobs:
   Version:
     name: Calculate Version
-    needs: [Slack_Start]
     runs-on: ubuntu-latest
     outputs:
       repo_version_env: ${{ steps.version.outputs.repo_tag }}
@@ -26,7 +25,7 @@ jobs:
       uses: online-applications/version-action@v1.8.9
   Push_Tag:
     name: Push New Tag
-    needs: [Test, Version]
+    needs: [Version]
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
