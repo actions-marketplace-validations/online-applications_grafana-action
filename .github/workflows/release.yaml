@@ -1,0 +1,171 @@
+name: Release
+
+on: 
+  push:
+    branches:
+      - production
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+env:
+  PROJECT_NAME:                 ${{ github.event.repository.name }}
+  PROJECT_URL:                  ${{ github.event.repository.url }}
+  COMMITER:                     ${{ github.event.sender.login }}
+  SLACK_URL:                    ${{ secrets.slack_search_devops_domain }}
+  CHANNEL_ID:                   ${{ secrets.rise_rnd_devops_dev_channel_id }}
+  USERS_FILE:                   users.json
+  USERS_S3_FILE_PATH:           ${{ secrets.users_s3_file_path }}
+  COMMIT_MESSAGE:               ${{ github.event.head_commit.message }}
+  COMMIT_SHA:                   ${{ github.event.pull_request.base.sha }}
+  PR_BUILD_URL:                 ${{ github.event.pull_request.diff_url }}
+  PUSH_BUILD_URL:               ${{ github.event.repository.html_url }}
+  AWS_ACCESS_KEY_ID_SEARCH:     ${{ secrets.aws_access_key }}
+  AWS_SECRET_ACCESS_KEY_SEARCH: ${{ secrets.aws_secret_key }}
+  AWS_ACCESS_KEY_ID_PROG:       ${{ secrets.aws_access_key_github_actions_prog }}
+  AWS_SECRET_ACCESS_KEY_PROG:   ${{ secrets.aws_secret_key_github_actions_prog }}
+  AWS_REGION:                   us-east-1
+
+  # Dynamics:
+  RUN_ID:                       ${{ github.run_id }}
+  ENVIRONMENT:                  ${{ github.ref_name }}
+  TEAM:                         DevOps
+
+  # Release data
+  RELEASE_TAG:                  v2.0.0
+
+jobs:
+  Slack_Start:
+    name: Send Slack Message on start
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_SEARCH }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_SEARCH }}
+        aws-region: us-east-1
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    - name: Pull and tag docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker pull $ECR_REGISTRY/slack-action:production_v2.0.0
+        docker tag $ECR_REGISTRY/slack-action:production_v2.0.0 slack-action
+    - name: Send Slack Started Message
+      run: |
+        docker run --env-file .github/github_actions.env slack-action started
+  
+# TODO add tests
+  
+  Tag_Release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Update tag ${{ env.RELEASE_TAG }}
+      if: ${{ env.ENVIRONMENT  == 'production' }}
+      run: |
+        git tag --delete ${{ env.RELEASE_TAG }} || true
+        git push origin --delete ${{ env.RELEASE_TAG }} || true
+        git tag ${{ env.RELEASE_TAG }}
+        git push origin ${{ env.RELEASE_TAG }}
+    - name: Release tag ${{ env.RELEASE_TAG }}
+      if: ${{ env.ENVIRONMENT  == 'production' }}
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ env.RELEASE_TAG }}
+        allowUpdates: true
+
+  # Publish_Docker:
+  #   runs-on: ubuntu-latest
+  #   needs: [Test]
+  #   strategy:
+  #     matrix:
+  #       account: [SEARCH, PROG]
+  #   steps:
+  #   - name: Checkout source code
+  #     uses: actions/checkout@v2
+  #   - name: Configure AWS credentials for SEARCH
+  #     if: ${{ env.ENVIRONMENT  == 'production' && matrix.account == 'SEARCH' }}
+  #     uses: aws-actions/configure-aws-credentials@v1
+  #     with:
+  #       aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_SEARCH }}
+  #       aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_SEARCH }}
+  #       aws-region: us-east-1
+  #   - name: Configure AWS credentials for PROG
+  #     if: ${{ env.ENVIRONMENT  == 'production' && matrix.account == 'PROG' }}
+  #     uses: aws-actions/configure-aws-credentials@v1
+  #     with:
+  #       aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_PROG }}
+  #       aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_PROG }}
+  #       aws-region: us-east-1
+  #   - name: Login to Amazon ECR
+  #     if: ${{ env.ENVIRONMENT  == 'production' }}
+  #     id: login-ecr
+  #     uses: aws-actions/amazon-ecr-login@v1
+  #   - name: Build & Tag docker
+  #     if: ${{ env.ENVIRONMENT  == 'production' }}
+  #     env:
+  #       ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+  #     run: |
+  #       docker build -t $ECR_REGISTRY/version-action:production_${{ env.RELEASE_TAG }} .
+  #       docker push $ECR_REGISTRY/version-action:production_${{ env.RELEASE_TAG }}
+
+  Slack_Fail:
+    name: Send Slack Message on fail
+    runs-on: ubuntu-latest
+    if: ${{ always() && !cancelled() && contains(join(needs.Slack_Start.result, ''), 'failure') || contains(join(needs.Tag_Release.result, ''), 'failure') }}
+    needs: [Slack_Start, Tag_Release]
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_SEARCH }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_SEARCH }}
+        aws-region: us-east-1
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker pull $ECR_REGISTRY/slack-action:production_v2.0.0
+        docker tag $ECR_REGISTRY/slack-action:production_v2.0.0 slack-action
+    - name: Send Slack Failed Message
+      run: |
+        docker run --env-file .github/github_actions.env slack-action failed ${{ env.RELEASE_TAG }}
+
+  Slack_Success:
+    name: Send Slack Message on success
+    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && contains(join(needs.Tag_Release.result, ''), 'success') }}
+    needs: [Tag_Release]
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_SEARCH }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_SEARCH }}
+        aws-region: us-east-1
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker pull $ECR_REGISTRY/slack-action:production_v2.0.0
+        docker tag $ECR_REGISTRY/slack-action:production_v2.0.0 slack-action
+    - name: Send Slack Success Message
+      run: |
+        docker run --env-file .github/github_actions.env slack-action success ${{ env.RELEASE_TAG }}
