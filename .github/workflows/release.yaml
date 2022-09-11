@@ -68,14 +68,14 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v2
     - name: Update tag ${{ env.RELEASE_TAG }}
-      if: ${{ env.ENVIRONMENT  == 'production' }}
+      if: ${{ env.ENVIRONMENT  == 'main' }}
       run: |
         git tag --delete ${{ env.RELEASE_TAG }} || true
         git push origin --delete ${{ env.RELEASE_TAG }} || true
         git tag ${{ env.RELEASE_TAG }}
         git push origin ${{ env.RELEASE_TAG }}
     - name: Release tag ${{ env.RELEASE_TAG }}
-      if: ${{ env.ENVIRONMENT  == 'production' }}
+      if: ${{ env.ENVIRONMENT  == 'main' }}
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ env.RELEASE_TAG }}
@@ -91,25 +91,25 @@ jobs:
   #   - name: Checkout source code
   #     uses: actions/checkout@v2
   #   - name: Configure AWS credentials for SEARCH
-  #     if: ${{ env.ENVIRONMENT  == 'production' && matrix.account == 'SEARCH' }}
+  #     if: ${{ env.ENVIRONMENT  == 'main' && matrix.account == 'SEARCH' }}
   #     uses: aws-actions/configure-aws-credentials@v1
   #     with:
   #       aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_SEARCH }}
   #       aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_SEARCH }}
   #       aws-region: us-east-1
   #   - name: Configure AWS credentials for PROG
-  #     if: ${{ env.ENVIRONMENT  == 'production' && matrix.account == 'PROG' }}
+  #     if: ${{ env.ENVIRONMENT  == 'main' && matrix.account == 'PROG' }}
   #     uses: aws-actions/configure-aws-credentials@v1
   #     with:
   #       aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_PROG }}
   #       aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_PROG }}
   #       aws-region: us-east-1
   #   - name: Login to Amazon ECR
-  #     if: ${{ env.ENVIRONMENT  == 'production' }}
+  #     if: ${{ env.ENVIRONMENT  == 'main' }}
   #     id: login-ecr
   #     uses: aws-actions/amazon-ecr-login@v1
   #   - name: Build & Tag docker
-  #     if: ${{ env.ENVIRONMENT  == 'production' }}
+  #     if: ${{ env.ENVIRONMENT  == 'main' }}
   #     env:
   #       ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
   #     run: |
@@ -146,8 +146,8 @@ jobs:
   Slack_Success:
     name: Send Slack Message on success
     runs-on: ubuntu-latest
-    if: ${{ !cancelled() && contains(join(needs.Tag_Release.result, ''), 'success') }}
-    needs: [Tag_Release]
+    if: ${{ !cancelled() && contains(join(needs.Tag_Release.result, ''), 'success') && contains(join(needs.Slack_Start.result, ''), 'success') }}
+    needs: [Slack_Start, Tag_Release]
     steps:
     - name: Checkout source
       uses: actions/checkout@v2
