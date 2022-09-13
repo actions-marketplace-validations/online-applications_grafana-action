@@ -32,7 +32,7 @@ env:
   TEAM:                         DevOps
 
   # Release data
-  RELEASE_TAG:                  v2.0.0
+  RELEASE_TAG:                  v1.0.2
 
 jobs:
   Slack_Start:
